@@ -99,4 +99,39 @@ export const updateUserProfile = async (profileData) => {
     }
 };
 
+// ─── Location APIs ────────────────────────────────────────────
+
+export const getLocationHierarchy = async () => {
+    const res = await api.get('/orders/locations/hierarchy');
+    return res.data;
+};
+
+// Vendor Delivery Areas
+export const getVendorDeliveryAreas = async () => {
+    const res = await api.get('/orders/locations/vendor-delivery-areas');
+    return res.data;
+};
+export const addVendorDeliveryAreas = async (payload) => {
+    const res = await api.post('/orders/locations/vendor-delivery-areas', payload);
+    return res.data;
+};
+export const deleteVendorDeliveryArea = async (id) => {
+    const res = await api.delete(`/orders/locations/vendor-delivery-areas/${id}`);
+    return res.data;
+};
+
+// Super-Admin Location CRUD
+export const createCountry  = async (data) => (await api.post('/orders/locations/countries', data)).data;
+export const createState    = async (data) => (await api.post('/orders/locations/states', data)).data;
+export const createDistrict = async (data) => (await api.post('/orders/locations/districts', data)).data;
+export const createTaluka   = async (data) => (await api.post('/orders/locations/talukas', data)).data;
+export const createArea     = async (data) => (await api.post('/orders/locations/areas', data)).data;
+
+export const deleteCountry  = async (id) => (await api.delete(`/orders/locations/countries/${id}`)).data;
+export const deleteState    = async (id) => (await api.delete(`/orders/locations/states/${id}`)).data;
+export const deleteDistrict = async (id) => (await api.delete(`/orders/locations/districts/${id}`)).data;
+export const deleteTaluka   = async (id) => (await api.delete(`/orders/locations/talukas/${id}`)).data;
+export const deleteArea     = async (id) => (await api.delete(`/orders/locations/areas/${id}`)).data;
+
 export default api;
+

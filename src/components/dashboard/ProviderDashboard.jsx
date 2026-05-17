@@ -5,16 +5,23 @@ import { AuthContext } from "../auth/AuthContext";
 import Swal from "sweetalert2";
 import api from "../../services/api";
 import {
+  getLocationHierarchy,
+  getVendorDeliveryAreas,
+  addVendorDeliveryAreas,
+  deleteVendorDeliveryArea,
+} from "../../services/api";
+import {
   FaHome, FaUtensils, FaClipboardList, FaChartBar,
   FaToggleOn, FaToggleOff, FaPlus, FaTrash, FaCheck, FaEdit, FaTimes, FaUpload,
-  FaTruck, FaWallet, FaStar, FaStore, FaBars, FaRupeeSign
+  FaTruck, FaWallet, FaStar, FaStore, FaBars, FaRupeeSign, FaMapMarkerAlt, FaChevronDown, FaChevronRight, FaSearch
 } from "react-icons/fa";
 
 const NAV = [
-  { id:"dashboard", label:"Dashboard",   icon:<FaHome /> },
-  { id:"menu",      label:"Tiffin Menu", icon:<FaUtensils /> },
-  { id:"orders",    label:"Orders",      icon:<FaClipboardList /> },
-  { id:"analytics", label:"Analytics",  icon:<FaChartBar /> },
+  { id:"dashboard", label:"Dashboard",      icon:<FaHome /> },
+  { id:"menu",      label:"Tiffin Menu",    icon:<FaUtensils /> },
+  { id:"orders",    label:"Orders",         icon:<FaClipboardList /> },
+  { id:"locations", label:"Delivery Areas", icon:<FaMapMarkerAlt /> },
+  { id:"analytics", label:"Analytics",     icon:<FaChartBar /> },
 ];
 
 const MOCK_MENU = [
@@ -632,6 +639,447 @@ const AnalyticsView = () => {
   );
 };
 
+// ─── VENDOR LOCATION VIEW ────────────────────────────────────
+// Reusable sub-components for Vendor Location View
+const VendorSelect = ({ label, value, onChange, options, placeholder }) => (
+  <div className="space-y-1.5">
+    <label className="text-xs font-black text-gray-500 uppercase tracking-wider block ml-1">{label}</label>
+    <select
+      required value={value} onChange={e => onChange(e.target.value)}
+      className="w-full px-4 py-2.5 rounded-xl border border-orange-100 bg-gray-50 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-saffron-500/20 focus:border-saffron-500 transition-all text-gray-800 cursor-pointer"
+    >
+      <option value="">{placeholder}</option>
+      {options.map(opt => (
+        <option key={opt.value} value={opt.value}>{opt.label}</option>
+      ))}
+    </select>
+  </div>
+);
+
+const VendorField = ({ label, value, onChange, placeholder, type = "text" }) => (
+  <div className="space-y-1.5">
+    <label className="text-xs font-black text-gray-500 uppercase tracking-wider block ml-1">{label}</label>
+    <input
+      type={type} required value={value} placeholder={placeholder}
+      onChange={e => onChange(e.target.value)}
+      className="w-full px-4 py-2.5 rounded-xl border border-orange-100 bg-gray-50 text-sm outline-none focus:bg-white focus:ring-2 focus:ring-saffron-500/20 focus:border-saffron-500 transition-all text-gray-800"
+    />
+  </div>
+);
+
+const VendorLocationView = () => {
+  const [hierarchy, setHierarchy]   = useState([]);
+  const [myAreas, setMyAreas]       = useState([]);
+  const [loading, setLoading]       = useState(true);
+  const [search, setSearch]         = useState("");
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [adding, setAdding]         = useState(false);
+
+  // Cascade Selection States
+  const [countryId, setCountryId]   = useState("");
+  const [stateId, setStateId]       = useState("");
+  const [districtId, setDistrictId] = useState("");
+  const [talukaId, setTalukaId]     = useState("");
+  const [selectedAreaIds, setSelectedAreaIds] = useState([]);
+
+  // Settings
+  const [deliveryCharge, setDeliveryCharge] = useState("20");
+  const [minimumOrderAmount, setMinimumOrderAmount] = useState("100");
+  const [estimatedDeliveryTime, setEstimatedDeliveryTime] = useState("45");
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [hier, mine] = await Promise.all([
+        getLocationHierarchy(),
+        getVendorDeliveryAreas(),
+      ]);
+      setHierarchy(hier?.data || []);
+      setMyAreas(mine?.data || []);
+    } catch (e) {
+      console.error(e);
+      Swal.fire("Error", e?.response?.data?.message || "Failed to load location data.", "error");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => { fetchData(); }, []);
+
+  // Cascade Option Handlers
+  const handleCountryChange = (id) => {
+    setCountryId(id);
+    setStateId("");
+    setDistrictId("");
+    setTalukaId("");
+    setSelectedAreaIds([]);
+  };
+
+  const handleStateChange = (id) => {
+    setStateId(id);
+    setDistrictId("");
+    setTalukaId("");
+    setSelectedAreaIds([]);
+  };
+
+  const handleDistrictChange = (id) => {
+    setDistrictId(id);
+    setTalukaId("");
+    setSelectedAreaIds([]);
+  };
+
+  const handleTalukaChange = (id) => {
+    setTalukaId(id);
+    setSelectedAreaIds([]);
+  };
+
+  const toggleArea = (id) => {
+    setSelectedAreaIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const toggleAllAreas = (areasList) => {
+    if (selectedAreaIds.length === areasList.length) {
+      setSelectedAreaIds([]);
+    } else {
+      setSelectedAreaIds(areasList.map(a => a.id));
+    }
+  };
+
+  // Cascade Data Builders
+  const countries = hierarchy;
+  const states = countryId 
+    ? (hierarchy.find(c => c.id === countryId)?.States || hierarchy.find(c => c.id === countryId)?.states || []) 
+    : [];
+  const districts = stateId 
+    ? (states.find(s => s.id === stateId)?.Districts || states.find(s => s.id === stateId)?.districts || []) 
+    : [];
+  const talukas = districtId 
+    ? (districts.find(d => d.id === districtId)?.Talukas || districts.find(d => d.id === districtId)?.talukas || []) 
+    : [];
+  const areas = talukaId 
+    ? (talukas.find(t => t.id === talukaId)?.Areas || talukas.find(t => t.id === talukaId)?.areas || []) 
+    : [];
+
+  const handleAddAreas = async (e) => {
+    e.preventDefault();
+    if (selectedAreaIds.length === 0) {
+      return Swal.fire("Select Areas", "Please select at least one area locality.", "info");
+    }
+    setAdding(true);
+    try {
+      await addVendorDeliveryAreas({
+        areaIds: selectedAreaIds,
+        deliveryCharge: parseFloat(deliveryCharge),
+        minimumOrderAmount: parseFloat(minimumOrderAmount),
+        estimatedDeliveryTime: parseInt(estimatedDeliveryTime, 10),
+        isActive: true
+      });
+      Swal.fire({ icon: "success", title: "Delivery Area Added!", timer: 1500, showConfirmButton: false });
+      setSelectedAreaIds([]);
+      setCountryId(""); setStateId(""); setDistrictId(""); setTalukaId("");
+      setShowAddModal(false);
+      fetchData();
+    } catch (e) {
+      Swal.fire("Error", e?.response?.data?.message || "Failed to add delivery areas.", "error");
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const handleRemoveArea = async (id, name) => {
+    const confirm = await Swal.fire({
+      title: `Remove "${name}"?`,
+      text: "This area will be deleted from your active delivery zones.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#FF6B35",
+      cancelButtonColor: "#9ca3af",
+      confirmButtonText: "Yes, remove zone"
+    });
+    if (!confirm.isConfirmed) return;
+    try {
+      await deleteVendorDeliveryArea(id);
+      Swal.fire({ icon: "success", title: "Removed Successfully", timer: 1200, showConfirmButton: false });
+      fetchData();
+    } catch (e) {
+      Swal.fire("Error", e?.response?.data?.message || "Failed to remove area.", "error");
+    }
+  };
+
+  // Filter Active Mapped Areas for Search
+  const filteredMyAreas = myAreas.filter(a => {
+    const areaObj = a.area || {};
+    const areaName = areaObj.name || a.name || "";
+    const pincode  = areaObj.pincode || "";
+    const taluka   = areaObj.taluka?.name || "";
+    const district = areaObj.taluka?.district?.name || "";
+    const query    = search.toLowerCase().trim();
+    if (!query) return true;
+    return areaName.toLowerCase().includes(query) || 
+           pincode.includes(query) || 
+           taluka.toLowerCase().includes(query) || 
+           district.toLowerCase().includes(query);
+  });
+
+  return (
+    <div className="space-y-6">
+      
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-black text-gray-900 flex items-center gap-2">
+            <FaMapMarkerAlt className="text-saffron-500" /> Delivery Area Management
+          </h2>
+          <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-black">Configure regions where you deliver tiffin orders</p>
+        </div>
+        <button
+          onClick={() => setShowAddModal(true)}
+          className="bg-saffron-500 text-white font-black text-sm px-5 py-3 rounded-xl shadow-lg shadow-orange-500/20 hover:bg-saffron-600 hover:shadow-orange-500/35 transition-all flex items-center gap-2 cursor-pointer hover:scale-[1.02] active:scale-100"
+        >
+          <FaPlus /> Add Delivery Area
+        </button>
+      </div>
+
+      {/* ─── ADD DELIVERY ZONE POP-UP MODAL ─── */}
+      {showAddModal && (
+        <div className="fixed inset-0 bg-black/45 backdrop-blur-xs z-50 flex items-center justify-center p-4 animate-fadeIn">
+          {/* Clicking backdrop closes modal */}
+          <div className="absolute inset-0 cursor-default" onClick={() => setShowAddModal(false)} />
+          
+          {/* Modal Box */}
+          <div className="bg-white rounded-3xl border border-orange-100/50 shadow-2xl max-w-2xl w-full p-6 space-y-6 relative z-10 animate-scaleIn overflow-y-auto max-h-[90vh]">
+            {/* Close Button */}
+            <button 
+              onClick={() => setShowAddModal(false)}
+              className="absolute right-5 top-5 text-gray-400 hover:text-gray-600 hover:bg-gray-100 p-2 rounded-xl transition-all cursor-pointer"
+            >
+              <FaTimes size={16} />
+            </button>
+
+            <div>
+              <h3 className="text-lg font-black text-gray-900 flex items-center gap-2">
+                <FaPlus className="text-saffron-500" /> Add Active Delivery Area
+              </h3>
+              <p className="text-xs text-gray-400 mt-1 uppercase tracking-widest font-black">Select zones added by Super-Admin to serve customers</p>
+            </div>
+
+            <form onSubmit={handleAddAreas} className="space-y-6">
+              
+              {/* Cascade Location Selectors */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <VendorSelect
+                  label="Select Country" value={countryId} onChange={handleCountryChange} placeholder="Choose country..."
+                  options={countries.map(c => ({ value: c.id, label: c.name }))}
+                />
+                
+                <VendorSelect
+                  label="Select State" value={stateId} onChange={handleStateChange} placeholder="Choose state..."
+                  options={states.map(s => ({ value: s.id, label: s.name }))}
+                />
+
+                <VendorSelect
+                  label="Select District" value={districtId} onChange={handleDistrictChange} placeholder="Choose district..."
+                  options={districts.map(d => ({ value: d.id, label: d.name }))}
+                />
+
+                <VendorSelect
+                  label="Select Taluka" value={talukaId} onChange={handleTalukaChange} placeholder="Choose taluka..."
+                  options={talukas.map(t => ({ value: t.id, label: t.name }))}
+                />
+              </div>
+
+              {/* Multiple Areas Checklist */}
+              {talukaId && (
+                <div className="space-y-2 border border-orange-100/60 rounded-2xl p-4 bg-orange-50/15">
+                  <div className="flex items-center justify-between border-b border-orange-50 pb-2 mb-2">
+                    <span className="text-xs font-black text-gray-600 uppercase tracking-wider">Select Serving Localities / Areas</span>
+                    <button
+                      type="button" onClick={() => toggleAllAreas(areas)}
+                      className="text-xs text-saffron-600 hover:text-saffron-700 font-black uppercase cursor-pointer"
+                    >
+                      {selectedAreaIds.length === areas.length ? "Deselect All" : "Select All"}
+                    </button>
+                  </div>
+                  
+                  {areas.length === 0 ? (
+                    <p className="text-xs text-gray-400 font-bold py-2">No areas found under this taluka. Contact admin to add areas.</p>
+                  ) : (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto pr-1">
+                      {areas.map(a => {
+                        const isChecked = selectedAreaIds.includes(a.id);
+                        return (
+                          <label key={a.id} className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all border cursor-pointer ${
+                            isChecked 
+                              ? "bg-saffron-50/50 border-saffron-200 text-saffron-800" 
+                              : "bg-white border-gray-100 text-gray-700 hover:bg-gray-50"
+                          }`}>
+                            <input 
+                              type="checkbox" checked={isChecked} onChange={() => toggleArea(a.id)}
+                              className="accent-saffron-500 w-4 h-4 rounded cursor-pointer" 
+                            />
+                            <span className="truncate">{a.name}</span>
+                            {a.pincode && <span className="font-mono text-[10px] text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">PIN: {a.pincode}</span>}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Delivery Settings Inputs */}
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-orange-50/30 rounded-2xl border border-orange-100/30">
+                <VendorField 
+                  label="Delivery Charge (₹)" type="number" value={deliveryCharge} onChange={setDeliveryCharge} placeholder="e.g. 20" 
+                />
+                
+                <VendorField 
+                  label="Min Order Amount (₹)" type="number" value={minimumOrderAmount} onChange={setMinimumOrderAmount} placeholder="e.g. 100" 
+                />
+
+                <VendorField 
+                  label="Estimated Time (min)" type="number" value={estimatedDeliveryTime} onChange={setEstimatedDeliveryTime} placeholder="e.g. 45" 
+                />
+              </div>
+
+              {/* Action Buttons */}
+              <div className="flex justify-end gap-3 pt-2 border-t border-orange-50/50">
+                <button
+                  type="button" onClick={() => setShowAddModal(false)}
+                  className="bg-gray-50 text-gray-500 font-black text-sm px-6 py-3 rounded-xl border border-gray-200 hover:bg-gray-100 hover:text-gray-700 transition-all cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit" disabled={adding || !talukaId || selectedAreaIds.length === 0}
+                  className="bg-saffron-500 text-white font-black text-sm px-6 py-3 rounded-xl shadow-lg shadow-orange-500/10 hover:bg-saffron-600 hover:shadow-orange-500/25 transition-all cursor-pointer flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {adding ? (
+                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  ) : <FaPlus />}
+                  Add to Delivery Zones
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ─── TABULAR GEOGRAPHY MAPPED LIST SECTION ─── */}
+      <div className="bg-white rounded-3xl border border-orange-100/50 shadow-md shadow-orange-100/20 overflow-hidden">
+        
+        {/* Search & Stats Header */}
+        <div className="p-6 border-b border-orange-50/60 bg-gradient-to-r from-orange-50/10 to-orange-100/10 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <div className="bg-saffron-100 p-2.5 rounded-xl text-saffron-600">
+              <FaTruck size={16} />
+            </div>
+            <div>
+              <h3 className="font-black text-gray-800 text-base">My Service Localities</h3>
+              <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mt-0.5">Active zones you are currently accepting orders from</p>
+            </div>
+          </div>
+          
+          <div className="flex items-center gap-3 w-full md:w-auto">
+            {/* Realtime Search Bar */}
+            <div className="relative flex-1 md:w-64">
+              <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-300 text-sm" />
+              <input
+                type="text" placeholder="Search my delivery areas..." value={search} onChange={e => setSearch(e.target.value)}
+                className="w-full pl-9 pr-4 py-2.5 rounded-xl border border-orange-100 bg-gray-50 text-xs outline-none focus:bg-white focus:ring-2 focus:ring-saffron-500/20 focus:border-saffron-500 transition-all font-semibold"
+              />
+            </div>
+            <div className="bg-saffron-50 text-saffron-600 border border-saffron-100 rounded-xl px-4 py-2.5 text-xs font-black shrink-0">
+              {myAreas.length} Zones
+            </div>
+          </div>
+        </div>
+
+        {/* Tabular Grid */}
+        <div className="overflow-x-auto">
+          {loading ? (
+            <div className="flex flex-col items-center justify-center py-20 gap-3">
+              <div className="w-8 h-8 border-4 border-saffron-500 border-t-transparent rounded-full animate-spin" />
+              <span className="text-xs text-gray-400 font-black uppercase tracking-wider">Syncing delivery zones...</span>
+            </div>
+          ) : filteredMyAreas.length === 0 ? (
+            <div className="text-center py-20 space-y-3">
+              <div className="text-4xl">🚚</div>
+              <p className="text-gray-400 text-sm font-bold">No active delivery zones found.</p>
+              <p className="text-xs text-gray-400">Click "+ Add Delivery Area" in the header to select areas you serve.</p>
+            </div>
+          ) : (
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-orange-50/15 border-b border-orange-50/60">
+                  <th className="px-5 py-4 text-xs font-black text-gray-400 uppercase tracking-widest text-center w-12">#</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">Area / Locality</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">Pincode</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">Taluka</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">District</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">State</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest">Country</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-right">Delivery (₹)</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-right">Min Order (₹)</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-center">ETA (Min)</th>
+                  <th className="px-5 py-4 text-xs font-black text-gray-500 uppercase tracking-widest text-center w-20">Action</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-orange-50/30">
+                {filteredMyAreas.map((a, idx) => {
+                  const areaObj   = a.area || {};
+                  const talukaObj = areaObj.taluka || {};
+                  const distObj   = talukaObj.district || {};
+                  const stateObj  = distObj.state || {};
+                  const countObj  = stateObj.country || {};
+
+                  const areaName    = areaObj.name || a.name || "N/A";
+                  const pincode     = areaObj.pincode || "N/A";
+                  const talukaName  = talukaObj.name || "N/A";
+                  const distName    = distObj.name || "N/A";
+                  const stateName   = stateObj.name || "N/A";
+                  const countryName = countObj.name || "N/A";
+
+                  return (
+                    <tr key={a.id} className="hover:bg-orange-50/10 transition-colors">
+                      <td className="px-5 py-4 text-center font-mono text-gray-400 text-xs border-b border-orange-50/30">{idx + 1}</td>
+                      <td className="px-5 py-4 text-sm font-bold text-gray-900 border-b border-orange-50/30">{areaName}</td>
+                      <td className="px-5 py-4 text-xs font-mono text-gray-500 border-b border-orange-50/30">{pincode}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600 border-b border-orange-50/30">{talukaName}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600 border-b border-orange-50/30">{distName}</td>
+                      <td className="px-5 py-4 text-sm text-gray-600 border-b border-orange-50/30">{stateName}</td>
+                      <td className="px-5 py-4 text-sm font-semibold text-gray-900 border-b border-orange-50/30">{countryName}</td>
+                      <td className="px-5 py-4 text-sm font-black text-saffron-600 text-right border-b border-orange-50/30">₹{a.deliveryCharge}</td>
+                      <td className="px-5 py-4 text-sm font-bold text-gray-800 text-right border-b border-orange-50/30">₹{a.minimumOrderAmount}</td>
+                      <td className="px-5 py-4 text-center border-b border-orange-50/30">
+                        <span className="text-xs font-black text-gray-600 bg-gray-50 px-2.5 py-1 rounded-lg inline-block border border-gray-100">{a.estimatedDeliveryTime} Mins</span>
+                      </td>
+                      <td className="px-5 py-4 text-center border-b border-orange-50/30">
+                        <button 
+                          onClick={() => handleRemoveArea(a.id, areaName)}
+                          className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-xl transition-all cursor-pointer"
+                        >
+                          <FaTrash size={12} />
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+
+        {/* Table Footer */}
+        <div className="px-6 py-4 border-t border-orange-50 bg-orange-50/10 flex items-center justify-between text-xs text-gray-400 font-black">
+          <span>DELIVERY ENGINE STATUS: ACTIVE</span>
+          <span>REAL-TIME MAPPED GEOGRAPHY DATA</span>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 // ─── MAIN LAYOUT ─────────────────────────────────────────────
 const ProviderDashboard = () => {
   const { userName } = useContext(AuthContext);
@@ -643,6 +1091,7 @@ const ProviderDashboard = () => {
     dashboard: <DashboardView userName={userName} kitchenOpen={kitchenOpen} setKitchenOpen={setKitchenOpen} />,
     menu:      <MenuView />,
     orders:    <OrdersView />,
+    locations: <VendorLocationView />,
     analytics: <AnalyticsView />,
   };
 
