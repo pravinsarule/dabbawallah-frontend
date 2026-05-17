@@ -1,25 +1,27 @@
-import React, { useState, useContext, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+"use client";
+
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FaUser, FaEnvelope, FaLock, FaStore, FaMapMarkerAlt, FaArrowRight, FaGoogle } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { registerUser } from "../../services/api";
 
 const Register = () => {
-  const location = useLocation();
-  const [role, setRole] = useState(location.state?.role || "customer"); // 'customer' or 'vendor'
+  const searchParams = useSearchParams();
+  const [role, setRole] = useState(searchParams.get('role') || "customer");
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     password: "",
   });
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const router = useRouter();
 
   useEffect(() => {
-    if (location.state?.role) {
-      setRole(location.state.role);
-    }
-  }, [location.state]);
+    const roleParam = searchParams.get('role');
+    if (roleParam) setRole(roleParam);
+  }, [searchParams]);
 
   const handleRegister = async (e) => {
     e.preventDefault();
@@ -34,7 +36,7 @@ const Register = () => {
       });
       
       toast.success(`Account created successfully! Welcome to TheTiffins.`);
-      navigate("/login");
+      router.push("/login");
     } catch (error) {
       toast.error(error.message || "Registration failed. Please try again.");
     } finally {
@@ -183,7 +185,7 @@ const Register = () => {
             <p className="text-sm text-gray-500">
               Already have an account?{" "}
               <Link 
-                to="/login" 
+                href="/login" 
                 className="text-saffron-600 font-bold hover:underline"
               >
                 Sign in here

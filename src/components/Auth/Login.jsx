@@ -1,5 +1,8 @@
-import React, { useState, useContext, useEffect } from "react";
-import { Link, useNavigate, useLocation } from "react-router-dom";
+"use client";
+
+import React, { useState, useContext } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { FaEnvelope, FaLock, FaGoogle, FaArrowRight, FaEye, FaEyeSlash } from "react-icons/fa";
 import { toast } from "react-toastify";
 import { AuthContext } from "./AuthContext";
@@ -7,21 +10,21 @@ import { loginUser } from "../../services/api";
 import OTPVerification from "./OTPVerification";
 
 const Login = () => {
-  const location = useLocation();
+  const router = useRouter();
+  const { handleLoginSuccess } = useContext(AuthContext);
+
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
   const [loading, setLoading] = useState(false);
   const [showOtp, setShowOtp] = useState(false);
   const [unverifiedEmail, setUnverifiedEmail] = useState("");
-  const navigate = useNavigate();
-  const { handleLoginSuccess } = useContext(AuthContext);
 
   const handleOtpSuccess = (user, token) => {
     setShowOtp(false);
     handleLoginSuccess(user.name, user.role, token);
     toast.success(`Email verified! Welcome back, ${user.name}!`);
     const role = user.role;
-    navigate(role === 'user' ? '/dashboard/customer' : '/dashboard/provider');
+    router.push(role === 'user' ? '/dashboard/customer' : '/dashboard/provider');
   };
 
   const handleLogin = async (e) => {
@@ -36,7 +39,7 @@ const Login = () => {
       toast.success(`Welcome back, ${user.name}!`);
       
       const role = user.role;
-      navigate(role === 'user' ? '/dashboard/customer' : '/dashboard/provider');
+      router.push(role === 'user' ? '/dashboard/customer' : '/dashboard/provider');
     } catch (error) {
       if (error.message && error.message.includes("not verified")) {
         setUnverifiedEmail(formData.email);
@@ -130,7 +133,7 @@ const Login = () => {
             <div className="space-y-2">
               <div className="flex justify-between items-center px-1">
                 <label className="text-sm font-bold text-gray-700">Password</label>
-                <Link to="/forgot-password" title="Forgot Password" className="text-xs font-bold text-saffron-600 hover:text-saffron-700">
+                <Link href="/forgot-password" title="Forgot Password" className="text-xs font-bold text-saffron-600 hover:text-saffron-700">
                   Forgot?
                 </Link>
               </div>
@@ -175,7 +178,7 @@ const Login = () => {
           <p className="text-center text-sm text-gray-500">
             Don't have an account?{" "}
             <Link 
-              to="/register" 
+              href="/register" 
               className="text-saffron-600 font-bold hover:underline"
             >
               Sign up free

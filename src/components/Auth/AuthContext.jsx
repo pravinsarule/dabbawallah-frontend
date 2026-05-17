@@ -1,11 +1,24 @@
+"use client";
+
 import React, { createContext, useState, useEffect } from "react";
 
 export const AuthContext = createContext();
 
+// Safe localStorage helper — returns null during SSR
+const getLS = (key) => (typeof window !== "undefined" ? localStorage.getItem(key) : null);
+
 export const AuthProvider = ({ children }) => {
-  const [isLoggedIn, setIsLoggedIn] = useState(!!localStorage.getItem("token"));
-  const [userName, setUserName] = useState(localStorage.getItem("userName") || "");
-  const [userRole, setUserRole] = useState(localStorage.getItem("userRole") || "customer");
+  // Start with safe defaults; actual values are hydrated after mount
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [userName, setUserName] = useState("");
+  const [userRole, setUserRole] = useState("customer");
+
+  // Hydrate from localStorage once on the client
+  useEffect(() => {
+    setIsLoggedIn(!!getLS("token"));
+    setUserName(getLS("userName") || "");
+    setUserRole(getLS("userRole") || "customer");
+  }, []);
 
   const handleLoginSuccess = (name, role, token) => {
     localStorage.setItem("token", token);

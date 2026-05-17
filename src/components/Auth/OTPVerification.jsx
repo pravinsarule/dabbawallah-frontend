@@ -1,4 +1,5 @@
 // components/OTPVerification.js
+"use client";
 import { useState } from "react";
 import { verifyOtp, sendOtp } from "../../services/api";
 import { toast } from "react-toastify";
